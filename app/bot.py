@@ -36,7 +36,7 @@ def split_message(message: str) -> list[str]:
     
     return chunks
 
-class TourDateDrake(discord.Client):
+class BetterLover(discord.Client):
     def __init__(self):
         # We need message content intent to read messages
         intents = discord.Intents.default()
@@ -47,7 +47,7 @@ class TourDateDrake(discord.Client):
     async def setup_hook(self):
         await self.tree.sync()
 
-client = TourDateDrake()
+client = BetterLover()
 
 @client.tree.command(name="dates", description="Format tour dates from text")
 @app_commands.describe(
