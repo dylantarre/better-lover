@@ -15,6 +15,7 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 API_URL = os.getenv("API_URL", "http://api:4343")
 MAX_DISCORD_LENGTH = 1990  # Leave some room for the code block markers
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 def split_message(message: str) -> list[str]:
     """Split a message into chunks that fit within Discord's character limit."""
@@ -64,6 +65,10 @@ async def dates(interaction: discord.Interaction, text: str):
             async with session.post(
                 f"{API_URL}/format/text",
                 json={"text": text},
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
                 timeout=aiohttp.ClientTimeout(total=180)  # 3 minute timeout
             ) as response:
                 if response.status != 200:
