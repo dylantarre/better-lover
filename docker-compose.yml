@@ -12,7 +12,7 @@ services:
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - DISCORD_TOKEN=${DISCORD_TOKEN}
-      - API_URL=http://api:4343
+      - API_URL=http://api:4545
       - SERVICE=bot
     depends_on:
       - api 
