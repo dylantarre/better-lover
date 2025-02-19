@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-API_URL = os.getenv("API_URL", "http://api:4343")
+API_URL = os.getenv("API_URL", "http://api:4545")
 MAX_DISCORD_LENGTH = 1990  # Leave some room for the code block markers
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
@@ -84,7 +84,7 @@ async def dates(interaction: discord.Interaction, text: str):
                     
                 result = await response.json()
 
-            formatted_dates = result.get("formatted_dates", "Error: No dates found") + "\n\nPlease double-check all info as Better Lover can make mistakes."
+            formatted_dates = result.get("formatted_dates", "Error: No dates found")
             logger.info(f"Sending formatted response to Discord: {formatted_dates}")
             
             # Split long messages
@@ -92,7 +92,7 @@ async def dates(interaction: discord.Interaction, text: str):
             
             # Send first chunk as initial response
             try:
-                await interaction.followup.send(f"```\n{chunks[0]}\n```")
+                await interaction.followup.send(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
             except discord.NotFound:
                 logger.error("Initial interaction expired, creating new message")
                 return
@@ -119,8 +119,8 @@ async def dates(interaction: discord.Interaction, text: str):
         except discord.NotFound:
             logger.error("Interaction expired during error handling")
 
-@client.tree.command(name="read", description="Extract tour dates from an image")
-async def read(interaction: discord.Interaction, image: discord.Attachment):
+@client.tree.command(name="image", description="Extract tour dates from an image")
+async def image(interaction: discord.Interaction, image: discord.Attachment):
     try:
         # First respond that we're working on it
         await interaction.response.defer(thinking=True, ephemeral=False)
@@ -157,7 +157,7 @@ async def read(interaction: discord.Interaction, image: discord.Attachment):
                 result = await response.json()
                 logger.info(f"Parsed API response: {result}")
 
-            formatted_dates = result.get("formatted_dates", "Error: No dates found") + "\n\nPlease double-check all info as Better Lover can make mistakes."
+            formatted_dates = result.get("formatted_dates", "Error: No dates found")
             logger.info(f"Sending formatted response to Discord: {formatted_dates}")
             
             # Split long messages
@@ -165,7 +165,7 @@ async def read(interaction: discord.Interaction, image: discord.Attachment):
             
             # Send first chunk as initial response
             try:
-                await interaction.followup.send(f"```\n{chunks[0]}\n```")
+                await interaction.followup.send(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
             except discord.NotFound:
                 logger.error("Initial interaction expired, creating new message")
                 return
@@ -240,7 +240,7 @@ async def imageurl(interaction: discord.Interaction, url: str):
                     result = await api_response.json()
                     logger.info(f"Parsed API response: {result}")
 
-            formatted_dates = result.get("formatted_dates", "Error: No dates found") + "\n\nPlease double-check all info as Better Lover can make mistakes."
+            formatted_dates = result.get("formatted_dates", "Error: No dates found")
             logger.info(f"Sending formatted response to Discord: {formatted_dates}")
             
             # Split long messages
@@ -248,7 +248,7 @@ async def imageurl(interaction: discord.Interaction, url: str):
             
             # Send first chunk as initial response
             try:
-                await interaction.followup.send(f"```\n{chunks[0]}\n```")
+                await interaction.followup.send(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
             except discord.NotFound:
                 logger.error("Initial interaction expired, creating new message")
                 return
