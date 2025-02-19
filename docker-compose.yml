@@ -2,7 +2,7 @@ services:
   api:
     build: .
     ports:
-      - "4343:4343"
+      - "4545:4545"
     environment:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - SERVICE=api
