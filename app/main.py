@@ -101,7 +101,7 @@ async def process_image(client: OpenAI, image_data: str, is_url: bool = False) -
                 raise HTTPException(status_code=500, detail="No content in AI service response")
                 
             logger.info(f"Successfully extracted content: {content}")
-            return content + "\n\nPlease double-check all info as Better Lover can make mistakes."
+            return content
             
         except Exception as e:
             if attempt < max_retries - 1:
@@ -133,7 +133,7 @@ async def process_text(client: OpenAI, text: str) -> str:
                 max_tokens=1000
             )
             logger.info(f"Received response from GPT-4: {response.choices[0].message.content}")
-            return response.choices[0].message.content + "\n\nPlease double-check all info as Better Lover can make mistakes."
+            return response.choices[0].message.content
         except Exception as e:
             if attempt < max_retries - 1:
                 logger.warning(f"Attempt {attempt + 1} failed, retrying in {retry_delay} seconds: {str(e)}")
