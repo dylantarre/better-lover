@@ -39,249 +39,286 @@ def split_message(message: str) -> list[str]:
 
 class BetterLover(discord.Client):
     def __init__(self):
-        # We need message content intent to read messages
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(intents=intents)
-        self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
-        await self.tree.sync()
+        # No need to sync commands anymore
+        pass
 
-client = BetterLover()
+    async def on_message(self, message):
+        # Ignore messages from the bot itself
+        if message.author == self.user:
+            return
 
-@client.tree.command(name="dates", description="Format tour dates from text")
-@app_commands.describe(
-    text="Tour dates text to format"
-)
-async def dates(interaction: discord.Interaction, text: str):
-    try:
-        # First respond that we're working on it
-        await interaction.response.defer(thinking=True, ephemeral=False)
+        # Check if bot is mentioned
+        if self.user not in message.mentions:
+            return
+
+        # Remove the mention and any extra whitespace
+        content = message.content.replace(f'<@{self.user.id}>', '').strip()
         
-        async with aiohttp.ClientSession() as session:
-            # Process as regular text
-            logger.info(f"Processing text: {text[:100]}...")
-            async with session.post(
-                f"{API_URL}/format/text",
-                json={"text": text},
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                timeout=aiohttp.ClientTimeout(total=180)  # 3 minute timeout
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
-                    try:
-                        error_json = await response.json()
-                        error_detail = error_json.get('detail', 'Unknown error')
-                    except:
-                        error_detail = error_text
-                    logger.error(f"API error response: {error_text}")
-                    await interaction.followup.send(f"Error: {error_detail}")
+        if not content and not message.attachments:
+            await message.reply("Please provide some tour dates, an image, or an image URL.")
+            return
+
+        await message.add_reaction('⏳')  # Show we're processing
+
+        try:
+            # Check for image attachments first
+            if message.attachments and message.attachments[0].content_type.startswith('image/'):
+                await self.process_image(message, message.attachments[0])
+            # Then check for URLs
+            elif content.startswith(('http://', 'https://')) and any(ext in content.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']):
+                await self.process_image_url(message, content)
+            # Otherwise process as text
+            else:
+                await self.process_text(message, content)
+        except Exception as e:
+            await message.clear_reactions()
+            await message.add_reaction('❌')
+            await message.reply(f"Error: {str(e)}")
+
+    async def process_text(self, message, text):
+        try:
+            # First respond that we're working on it
+            await message.add_reaction('⏳')
+            
+            async with aiohttp.ClientSession() as session:
+                # Process as regular text
+                logger.info(f"Processing text: {text[:100]}...")
+                async with session.post(
+                    f"{API_URL}/format/text",
+                    json={"text": text},
+                    headers={
+                        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    timeout=aiohttp.ClientTimeout(total=180)  # 3 minute timeout
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        try:
+                            error_json = await response.json()
+                            error_detail = error_json.get('detail', 'Unknown error')
+                        except:
+                            error_detail = error_text
+                        logger.error(f"API error response: {error_text}")
+                        await message.clear_reactions()
+                        await message.add_reaction('❌')
+                        await message.reply(f"Error: {error_detail}")
+                        return
+                    
+                    result = await response.json()
+
+                formatted_dates = result.get("formatted_dates", "Error: No dates found")
+                logger.info(f"Sending formatted response to Discord: {formatted_dates}")
+                
+                # Split long messages
+                chunks = split_message(formatted_dates)
+                
+                # Send first chunk as initial response
+                try:
+                    await message.reply(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
+                except discord.NotFound:
+                    logger.error("Initial interaction expired, creating new message")
                     return
                     
-                result = await response.json()
-
-            formatted_dates = result.get("formatted_dates", "Error: No dates found")
-            logger.info(f"Sending formatted response to Discord: {formatted_dates}")
-            
-            # Split long messages
-            chunks = split_message(formatted_dates)
-            
-            # Send first chunk as initial response
-            try:
-                await interaction.followup.send(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
-            except discord.NotFound:
-                logger.error("Initial interaction expired, creating new message")
-                return
-                
-            # Send remaining chunks as follow-ups
-            if len(chunks) > 1:
-                try:
-                    for chunk in chunks[1:]:
-                        await interaction.followup.send(f"```\n(continued...)\n{chunk}\n```")
-                except discord.NotFound:
-                    logger.error("Follow-up interaction expired")
-                    return
-
-    except asyncio.TimeoutError:
-        logger.error("Request timed out")
-        try:
-            await interaction.followup.send("Error: Request timed out. Please try again.")
-        except discord.NotFound:
-            logger.error("Interaction expired during timeout")
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}", exc_info=True)
-        try:
-            await interaction.followup.send(f"Error: {str(e)}")
-        except discord.NotFound:
-            logger.error("Interaction expired during error handling")
-
-@client.tree.command(name="image", description="Extract tour dates from an image")
-async def image(interaction: discord.Interaction, image: discord.Attachment):
-    try:
-        # First respond that we're working on it
-        await interaction.response.defer(thinking=True, ephemeral=False)
-        
-        async with aiohttp.ClientSession() as session:
-            # Process image
-            logger.info(f"Processing image: {image.filename}")
-            
-            # Download the image
-            image_data = await image.read()
-            
-            # Send to our API using proper multipart form
-            form = aiohttp.FormData()
-            form.add_field('file', 
-                          image_data,
-                          filename=image.filename,
-                          content_type=image.content_type)
-            
-            async with session.post(
-                f"{API_URL}/format/image",
-                data=form,
-                timeout=aiohttp.ClientTimeout(total=180)  # 3 minute timeout
-            ) as response:
-                if response.status != 200:
-                    error_text = await response.text()
+                # Send remaining chunks as follow-ups
+                if len(chunks) > 1:
                     try:
-                        error_json = await response.json()
-                        error_detail = error_json.get('detail', 'Unknown error')
-                    except:
-                        error_detail = error_text
-                    logger.error(f"API error response: {error_text}")
-                    await interaction.followup.send(f"Error: {error_detail}")
-                    return
-                result = await response.json()
-                logger.info(f"Parsed API response: {result}")
+                        for chunk in chunks[1:]:
+                            await message.reply(f"```\n(continued...)\n{chunk}\n```")
+                    except discord.NotFound:
+                        logger.error("Follow-up interaction expired")
+                        return
 
-            formatted_dates = result.get("formatted_dates", "Error: No dates found")
-            logger.info(f"Sending formatted response to Discord: {formatted_dates}")
-            
-            # Split long messages
-            chunks = split_message(formatted_dates)
-            
-            # Send first chunk as initial response
+        except asyncio.TimeoutError:
+            logger.error("Request timed out")
             try:
-                await interaction.followup.send(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
+                await message.clear_reactions()
+                await message.add_reaction('❌')
+                await message.reply("Error: Request timed out. Please try again.")
             except discord.NotFound:
-                logger.error("Initial interaction expired, creating new message")
-                return
-                
-            # Send remaining chunks as follow-ups
-            if len(chunks) > 1:
-                try:
-                    for chunk in chunks[1:]:
-                        await interaction.followup.send(f"```\n(continued...)\n{chunk}\n```")
-                except discord.NotFound:
-                    logger.error("Follow-up interaction expired")
-                    return
+                logger.error("Interaction expired during timeout")
+        except Exception as e:
+            logger.error(f"Error processing request: {str(e)}", exc_info=True)
+            try:
+                await message.clear_reactions()
+                await message.add_reaction('❌')
+                await message.reply(f"Error: {str(e)}")
+            except discord.NotFound:
+                logger.error("Interaction expired during error handling")
 
-    except asyncio.TimeoutError:
-        logger.error("Request timed out")
+    async def process_image(self, message, attachment):
         try:
-            await interaction.followup.send("Error: Request timed out. Please try again.")
-        except discord.NotFound:
-            logger.error("Interaction expired during timeout")
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}", exc_info=True)
-        try:
-            await interaction.followup.send(f"Error: {str(e)}")
-        except discord.NotFound:
-            logger.error("Interaction expired during error handling")
-
-@client.tree.command(name="imageurl", description="Extract tour dates from an image URL")
-@app_commands.describe(
-    url="URL of the image to process (jpg, png, gif, webp)"
-)
-async def imageurl(interaction: discord.Interaction, url: str):
-    try:
-        # First respond that we're working on it
-        await interaction.response.defer(thinking=True, ephemeral=False)
-        
-        async with aiohttp.ClientSession() as session:
-            # Download the image from URL
-            logger.info(f"Downloading image from URL: {url}")
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as response:
-                if response.status != 200:
-                    raise Exception(f"Failed to download image: HTTP {response.status}")
+            # First respond that we're working on it
+            await message.add_reaction('⏳')
+            
+            async with aiohttp.ClientSession() as session:
+                # Process image
+                logger.info(f"Processing image: {attachment.filename}")
                 
-                # Get content type and filename
-                content_type = response.headers.get('content-type', 'image/jpeg')
-                filename = url.split('/')[-1]
+                # Download the image
+                image_data = await attachment.read()
                 
-                # Download the image data
-                image_data = await response.read()
-                
-                # Send to API using the same format as successful image upload
+                # Send to our API using proper multipart form
                 form = aiohttp.FormData()
-                form.add_field('file',
-                             image_data,
-                             filename=filename,
-                             content_type=content_type)
+                form.add_field('file', 
+                              image_data,
+                              filename=attachment.filename,
+                              content_type=attachment.content_type)
                 
                 async with session.post(
                     f"{API_URL}/format/image",
                     data=form,
                     timeout=aiohttp.ClientTimeout(total=180)  # 3 minute timeout
-                ) as api_response:
-                    if api_response.status != 200:
-                        error_text = await api_response.text()
+                ) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
                         try:
-                            error_json = await api_response.json()
+                            error_json = await response.json()
                             error_detail = error_json.get('detail', 'Unknown error')
                         except:
                             error_detail = error_text
                         logger.error(f"API error response: {error_text}")
-                        await interaction.followup.send(f"Error: {error_detail}")
+                        await message.clear_reactions()
+                        await message.add_reaction('❌')
+                        await message.reply(f"Error: {error_detail}")
                         return
-                    result = await api_response.json()
+                    result = await response.json()
                     logger.info(f"Parsed API response: {result}")
 
-            formatted_dates = result.get("formatted_dates", "Error: No dates found")
-            logger.info(f"Sending formatted response to Discord: {formatted_dates}")
-            
-            # Split long messages
-            chunks = split_message(formatted_dates)
-            
-            # Send first chunk as initial response
-            try:
-                await interaction.followup.send(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
-            except discord.NotFound:
-                logger.error("Initial interaction expired, creating new message")
-                return
+                formatted_dates = result.get("formatted_dates", "Error: No dates found")
+                logger.info(f"Sending formatted response to Discord: {formatted_dates}")
                 
-            # Send remaining chunks as follow-ups
-            if len(chunks) > 1:
+                # Split long messages
+                chunks = split_message(formatted_dates)
+                
+                # Send first chunk as initial response
                 try:
-                    for chunk in chunks[1:]:
-                        await interaction.followup.send(f"```\n(continued...)\n{chunk}\n```")
+                    await message.reply(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
                 except discord.NotFound:
-                    logger.error("Follow-up interaction expired")
+                    logger.error("Initial interaction expired, creating new message")
                     return
+                    
+                # Send remaining chunks as follow-ups
+                if len(chunks) > 1:
+                    try:
+                        for chunk in chunks[1:]:
+                            await message.reply(f"```\n(continued...)\n{chunk}\n```")
+                    except discord.NotFound:
+                        logger.error("Follow-up interaction expired")
+                        return
 
-    except asyncio.TimeoutError:
-        logger.error("Request timed out")
+        except asyncio.TimeoutError:
+            logger.error("Request timed out")
+            try:
+                await message.clear_reactions()
+                await message.add_reaction('❌')
+                await message.reply("Error: Request timed out. Please try again.")
+            except discord.NotFound:
+                logger.error("Interaction expired during timeout")
+        except Exception as e:
+            logger.error(f"Error processing request: {str(e)}", exc_info=True)
+            try:
+                await message.clear_reactions()
+                await message.add_reaction('❌')
+                await message.reply(f"Error: {str(e)}")
+            except discord.NotFound:
+                logger.error("Interaction expired during error handling")
+
+    async def process_image_url(self, message, url):
         try:
-            await interaction.followup.send("Error: Request timed out. Please try again.")
-        except discord.NotFound:
-            logger.error("Interaction expired during timeout")
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}", exc_info=True)
-        try:
-            await interaction.followup.send(f"Error: {str(e)}")
-        except discord.NotFound:
-            logger.error("Interaction expired during error handling")
+            # First respond that we're working on it
+            await message.add_reaction('⏳')
+            
+            async with aiohttp.ClientSession() as session:
+                # Download the image from URL
+                logger.info(f"Downloading image from URL: {url}")
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                    if response.status != 200:
+                        raise Exception(f"Failed to download image: HTTP {response.status}")
+                    
+                    # Get content type and filename
+                    content_type = response.headers.get('content-type', 'image/jpeg')
+                    filename = url.split('/')[-1]
+                    
+                    # Download the image data
+                    image_data = await response.read()
+                    
+                    # Send to API using the same format as successful image upload
+                    form = aiohttp.FormData()
+                    form.add_field('file',
+                                 image_data,
+                                 filename=filename,
+                                 content_type=content_type)
+                    
+                    async with session.post(
+                        f"{API_URL}/format/image",
+                        data=form,
+                        timeout=aiohttp.ClientTimeout(total=180)  # 3 minute timeout
+                    ) as api_response:
+                        if api_response.status != 200:
+                            error_text = await api_response.text()
+                            try:
+                                error_json = await api_response.json()
+                                error_detail = error_json.get('detail', 'Unknown error')
+                            except:
+                                error_detail = error_text
+                            logger.error(f"API error response: {error_text}")
+                            await message.clear_reactions()
+                            await message.add_reaction('❌')
+                            await message.reply(f"Error: {error_detail}")
+                            return
+                        result = await api_response.json()
+                        logger.info(f"Parsed API response: {result}")
+
+                formatted_dates = result.get("formatted_dates", "Error: No dates found")
+                logger.info(f"Sending formatted response to Discord: {formatted_dates}")
+                
+                # Split long messages
+                chunks = split_message(formatted_dates)
+                
+                # Send first chunk as initial response
+                try:
+                    await message.reply(f"```\n{chunks[0]}\n```\n\nPlease double-check all info as Better Lover can make mistakes.")
+                except discord.NotFound:
+                    logger.error("Initial interaction expired, creating new message")
+                    return
+                    
+                # Send remaining chunks as follow-ups
+                if len(chunks) > 1:
+                    try:
+                        for chunk in chunks[1:]:
+                            await message.reply(f"```\n(continued...)\n{chunk}\n```")
+                    except discord.NotFound:
+                        logger.error("Follow-up interaction expired")
+                        return
+
+        except asyncio.TimeoutError:
+            logger.error("Request timed out")
+            try:
+                await message.clear_reactions()
+                await message.add_reaction('❌')
+                await message.reply("Error: Request timed out. Please try again.")
+            except discord.NotFound:
+                logger.error("Interaction expired during timeout")
+        except Exception as e:
+            logger.error(f"Error processing request: {str(e)}", exc_info=True)
+            try:
+                await message.clear_reactions()
+                await message.add_reaction('❌')
+                await message.reply(f"Error: {str(e)}")
+            except discord.NotFound:
+                logger.error("Interaction expired during error handling")
+
+client = BetterLover()
 
 @client.event
 async def on_ready():
     try:
-        # Force sync commands
-        commands = await client.tree.sync()
-        logger.info(f"Synced {len(commands)} commands: {[cmd.name for cmd in commands]}")
-        
         invite_link = discord.utils.oauth_url(
             client.user.id,
             permissions=discord.Permissions(
