@@ -48,16 +48,24 @@ class BetterLover(discord.Client):
         pass
 
     async def on_message(self, message):
+        # Add debug logging
+        logger.info(f"Received message: {message.content}")
+        logger.info(f"Bot ID: {self.user.id}")
+        logger.info(f"Message mentions: {[m.id for m in message.mentions]}")
+
         # Ignore messages from the bot itself
         if message.author == self.user:
+            logger.info("Ignoring message from self")
             return
 
         # Check if bot is mentioned
         if self.user not in message.mentions:
+            logger.info("Bot not mentioned, ignoring")
             return
 
-        # Remove the mention and any extra whitespace
-        content = message.content.replace(f'<@{self.user.id}>', '').strip()
+        logger.info("Bot was mentioned, processing message")
+        # Remove both types of mentions
+        content = message.content.replace(f'<@{self.user.id}>', '').replace(f'<@!{self.user.id}>', '').strip()
         
         if not content and not message.attachments:
             await message.reply("Please provide some tour dates, an image, or an image URL.")
