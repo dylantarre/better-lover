@@ -39,8 +39,13 @@ def split_message(message: str) -> list[str]:
 
 class BetterLover(discord.Client):
     def __init__(self):
+        # Enable all intents we need
         intents = discord.Intents.default()
         intents.message_content = True
+        intents.messages = True  # Make sure we can see messages
+        intents.guild_messages = True  # For server messages
+        intents.dm_messages = True  # For DMs
+        intents.guilds = True  # For server info
         super().__init__(intents=intents)
 
     async def setup_hook(self):
@@ -48,19 +53,19 @@ class BetterLover(discord.Client):
         pass
 
     async def on_message(self, message):
-        # Add debug logging
-        logger.info(f"Received message: {message.content}")
-        logger.info(f"Bot ID: {self.user.id}")
-        logger.info(f"Message mentions: {[m.id for m in message.mentions]}")
+        # Add more debug logging
+        logger.info(f"Message received from {message.author}: {message.content}")
+        logger.info(f"Channel: {message.channel}")
+        logger.info(f"Bot mentioned: {self.user.mentioned_in(message)}")
+
+        # Check if bot is mentioned using mentioned_in
+        if not self.user.mentioned_in(message):
+            logger.info("Bot not mentioned, ignoring")
+            return
 
         # Ignore messages from the bot itself
         if message.author == self.user:
             logger.info("Ignoring message from self")
-            return
-
-        # Check if bot is mentioned
-        if self.user not in message.mentions:
-            logger.info("Bot not mentioned, ignoring")
             return
 
         logger.info("Bot was mentioned, processing message")
