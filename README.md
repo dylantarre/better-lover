@@ -27,10 +27,10 @@ API_URL=http://localhost:4545          # URL where the API is running
 2. Build and run the Docker container:
 ```bash
 docker build -t tour-date-drake .
-docker run -p 4343:4343 --env-file .env tour-date-drake
+docker run -p 4545:4545 --env-file .env tour-date-drake
 ```
 
-The API will be available at http://localhost:4343
+The API will be available at http://localhost:4545
 
 ## Discord Bot Setup
 

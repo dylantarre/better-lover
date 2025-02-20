@@ -136,9 +136,7 @@ Summer Tour 2024
 - 01/24 San Francisco, CA @ The Warfield *
 
 ## Notes
-* with special guest performance
-
-If any information is unclear, I'll either mark it with [?] or omit it entirely."""
+* with special guest performance"""
 
         # Text prompt for text analysis
         self.text_prompt = """I'm Better Lover, and I'll help format these tour dates consistently.
@@ -277,7 +275,6 @@ Example format:
                                 if data.get("choices") and len(data["choices"]) > 0:
                                     chunk = data["choices"][0]
                                     if chunk.get("finish_reason") == "stop":
-                                        yield "\n\n---\n*Note: Please verify all information as Better Lover may make mistakes.*"
                                         break
                                     if chunk.get("delta", {}).get("content"):
                                         content = chunk["delta"]["content"]
