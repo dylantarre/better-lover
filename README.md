@@ -1,13 +1,13 @@
 # Better Lover
 
-A FastAPI service that formats tour dates from both text and images using OpenRouter's AI models, with an optional Discord bot interface.
+A FastAPI service that formats tour dates from both text and images using OpenRouter's AI models, with a Discord bot interface.
 
 ## Features
 
 - Text input: Format tour dates from text using GPT-4
 - Image input: Extract and format tour dates from images using Claude-3
 - Consistent output format: MM/DD City, ST @ Venue Name
-- Discord bot integration: Use the service directly from Discord
+- Discord bot: Tag the bot with text, images, or URLs
 
 ## Requirements
 
@@ -21,7 +21,7 @@ A FastAPI service that formats tour dates from both text and images using OpenRo
 ```
 OPENROUTER_API_KEY=your_key_here
 DISCORD_TOKEN=your_discord_token_here  # Optional, for Discord bot
-API_URL=http://localhost:4343          # URL where the API is running
+API_URL=http://localhost:4545          # URL where the API is running
 ```
 
 2. Build and run the Docker container:
@@ -42,23 +42,25 @@ The API will be available at http://localhost:4343
 python bot_runner.py
 ```
 
-### Discord Commands
+## Discord Bot Usage
 
-- `/dates [text]` - Format tour dates from text
-- `/dates` with an attached image - Extract and format tour dates from an image
+Just tag the bot with:
+- Tour dates text: `@Better Lover 1/1 LA, CA @ Venue`
+- Image attachment: `@Better Lover` + attach image
+- Image URL: `@Better Lover https://example.com/tour-dates.jpg`
 
 ## API Endpoints
 
 ### Format Text
 ```bash
-curl -X POST "http://localhost:4343/format/text" \
+curl -X POST "http://localhost:4545/format/text" \
      -H "Content-Type: application/json" \
      -d '{"text": "1/1 New York, NY @ Madison Square Garden"}'
 ```
 
 ### Format Image
 ```bash
-curl -X POST "http://localhost:4343/format/image" \
+curl -X POST "http://localhost:4545/format/image" \
      -H "Content-Type: multipart/form-data" \
      -F "file=@path/to/image.jpg"
 ```
